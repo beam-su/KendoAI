@@ -1,0 +1,71 @@
+{
+    "type": "imagemap",
+    "baseUrl": "https://kendo-ai-assets.s3.eu-west-2.amazonaws.com/role_menu/1040",
+    "altText": "Role Selection Menu",
+    "baseSize": {
+      "width": 1040,
+      "height": 446
+    },
+    "actions": [
+      {
+        "type": "message",
+        "area": {
+          "x": 13,
+          "y": 7,
+          "width": 214,
+          "height": 137
+        },
+        "text": "Sempo"
+      },
+      {
+        "type": "message",
+        "area": {
+          "x": 245,
+          "y": 2,
+          "width": 211,
+          "height": 143
+        },
+        "text": "Jiho"
+      },
+      {
+        "type": "message",
+        "area": {
+          "x": 475,
+          "y": 2,
+          "width": 213,
+          "height": 142
+        },
+        "text": "Chuken"
+      },
+      {
+        "type": "message",
+        "area": {
+          "x": 13,
+          "y": 155,
+          "width": 214,
+          "height": 139
+        },
+        "text": "Fukusho"
+      },
+      {
+        "type": "message",
+        "area": {
+          "x": 244,
+          "y": 155,
+          "width": 214,
+          "height": 138
+        },
+        "text": "Taisho"
+      },
+      {
+        "type": "message",
+        "area": {
+          "x": 474,
+          "y": 154,
+          "width": 214,
+          "height": 142
+        },
+        "text": "Individual"
+      }
+    ]
+  }
