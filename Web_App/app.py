@@ -1,4 +1,4 @@
-# Install dependencies before running (streamlit, pandas, influxdb-client)
+# Install dependencies before running (streamlit, pandas, influxdb-client, json, boto3)
 # streamlit run c:/Users/beam_/OneDrive/Desktop/KendoAI/KendoAI/app.py
 #---------------------------------------------#
 # Import libraries
@@ -8,7 +8,7 @@ from influxdb_client import InfluxDBClient
 import time
 import numpy as np
 
-from hello_world.SecretsManager import get_secret
+from SecretsManager import get_secret
 
 #---------------------------------------------#
 # Declare Variables
