@@ -1,5 +1,5 @@
 # Install dependencies before running (streamlit, pandas, influxdb-client, json, boto3)
-# streamlit run c:/Users/beam_/OneDrive/Desktop/KendoAI/KendoAI/app.py
+# streamlit run c:/Users/beam_/OneDrive/Desktop/KendoAI/Web_App/app.py
 #---------------------------------------------#
 # Import libraries
 import streamlit as st
