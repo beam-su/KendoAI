@@ -7,6 +7,7 @@ import pandas as pd
 from influxdb_client import InfluxDBClient
 import time
 import numpy as np
+import requests
 
 from SecretsManager import get_secret
 
@@ -28,6 +29,9 @@ REFRESH_INTERVAL = 1
 # Initialize InfluxDB Client
 client = InfluxDBClient(url=INFLUXDB_URL, token=INFLUXDB_TOKEN, org=INFLUXDB_ORG)
 query_api = client.query_api()
+
+# ESP32 Cam Related Variables
+esp32_ip = secret_data.get('esp32_local_ip')
 
 #---------------------------------------------#
 # Declare Functions
@@ -86,6 +90,26 @@ def calculate_speed(data):
     speed_changes = acc_deltas * time_deltas  # Δv = a * Δt
     return abs(np.sum(speed_changes))
 
+def start_stream():
+    try:
+        response = requests.post(f"http://{esp32_ip}/start_stream", timeout=5)
+        if response.status_code == 200:
+            st.success("ESP32-CAM streaming started.")
+        else:
+            st.error(f"Failed to start stream: {response.text}")
+    except Exception as e:
+        st.error(f"Error starting stream: {e}")
+
+def stop_stream():
+    try:
+        response = requests.post(f"http://{esp32_ip}/stop_stream", timeout=5)
+        if response.status_code == 200:
+            st.success("ESP32-CAM streaming stopped.")
+        else:
+            st.error(f"Failed to stop stream: {response.text}")
+    except Exception as e:
+        st.error(f"Error stopping stream: {e}")
+
 #---------------------------------------------#
 
 # Set the title and favicon on the tab
@@ -111,10 +135,17 @@ if "gyro_data" not in st.session_state:
 # Start/Stop Button
 if st.button("Start/Stop Data Fetching"):
     st.session_state.is_running = not st.session_state.is_running
+    if st.session_state.is_running:
+        start_stream()  # Start the ESP32-CAM stream
+        st.session_state.stream_active = True
+    else:
+        stop_stream()  # Stop the ESP32-CAM stream
+        st.session_state.stream_active = False
 
 # Display current status
 status = "Running" if st.session_state.is_running else "Stopped"
 st.write(f"Status: **{status}**")
+st.write(f"ESP32-CAM Stream: **{stream_status}**")
 
 # Insights Section
 col1, col2, col3 = st.columns(3)
@@ -145,6 +176,11 @@ with col2:
 
 with col3:
     jerk_metric = st.metric("Average Jerk (m/s³)", f"{st.session_state.jerk:.2f}")
+#---------------------------------------------#
+# Video Stream Placeholder
+st.header("Practice Live Stream")
+if st.session_state.stream_active:
+    st.image(f"http://{esp32_ip}/", use_column_width=True)
 
 #---------------------------------------------#
 # Graph Plotting
