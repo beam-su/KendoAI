@@ -144,6 +144,7 @@ if st.button("Start/Stop Data Fetching"):
 
 # Display current status
 status = "Running" if st.session_state.is_running else "Stopped"
+stream_status = "Active" if st.session_state.stream_active else "Inactive"
 st.write(f"Status: **{status}**")
 st.write(f"ESP32-CAM Stream: **{stream_status}**")
 
