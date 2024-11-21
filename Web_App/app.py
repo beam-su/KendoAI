@@ -132,6 +132,9 @@ if "accel_data" not in st.session_state:
 if "gyro_data" not in st.session_state:
     st.session_state.gyro_data = pd.DataFrame(columns=["gyroX", "gyroY", "gyroZ"])
 
+if "stream_active" not in st.session_state:
+    st.session_state.stream_active = False  # Initialize stream_active to False
+
 # Start/Stop Button
 if st.button("Start/Stop Data Fetching"):
     st.session_state.is_running = not st.session_state.is_running
