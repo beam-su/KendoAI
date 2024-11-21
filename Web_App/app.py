@@ -92,7 +92,7 @@ def calculate_speed(data):
 
 def start_stream():
     try:
-        response = requests.post(f"http://{esp32_ip}/start_stream", timeout=5)
+        response = requests.post(f"{esp32_ip}start_stream", timeout=5)
         if response.status_code == 200:
             st.success("ESP32-CAM streaming started.")
         else:
@@ -102,7 +102,7 @@ def start_stream():
 
 def stop_stream():
     try:
-        response = requests.post(f"http://{esp32_ip}/stop_stream", timeout=5)
+        response = requests.post(f"{esp32_ip}stop_stream", timeout=5)
         if response.status_code == 200:
             st.success("ESP32-CAM streaming stopped.")
         else:
