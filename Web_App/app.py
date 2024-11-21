@@ -86,7 +86,6 @@ def calculate_speed(data):
     speed_changes = acc_deltas * time_deltas  # Δv = a * Δt
     return abs(np.sum(speed_changes))
 
-<<<<<<< HEAD
 def start_stream():
     try:
         response = requests.post(f"{esp32_ip}start_stream", timeout=5)
@@ -106,9 +105,6 @@ def stop_stream():
             st.error(f"Failed to stop stream: {response.text}")
     except Exception as e:
         st.error(f"Error stopping stream: {e}")
-
-=======
->>>>>>> parent of 64e27e5 (ESP32-CAM Stream)
 #---------------------------------------------#
 
 # Set the title and favicon on the tab
