@@ -85,26 +85,6 @@ def calculate_speed(data):
     # Approximate speed changes
     speed_changes = acc_deltas * time_deltas  # Δv = a * Δt
     return abs(np.sum(speed_changes))
-
-def start_stream():
-    try:
-        response = requests.post(f"{esp32_ip}start_stream", timeout=5)
-        if response.status_code == 200:
-            st.success("ESP32-CAM streaming started.")
-        else:
-            st.error(f"Failed to start stream: {response.text}")
-    except Exception as e:
-        st.error(f"Error starting stream: {e}")
-
-def stop_stream():
-    try:
-        response = requests.post(f"{esp32_ip}stop_stream", timeout=5)
-        if response.status_code == 200:
-            st.success("ESP32-CAM streaming stopped.")
-        else:
-            st.error(f"Failed to stop stream: {response.text}")
-    except Exception as e:
-        st.error(f"Error stopping stream: {e}")
 #---------------------------------------------#
 
 # Set the title and favicon on the tab
@@ -136,8 +116,6 @@ if st.button("Start/Stop Data Fetching"):
 
 # Display current status
 status = "Running" if st.session_state.is_running else "Stopped"
-stream_status = "Active" if st.session_state.stream_active else "Inactive"
-st.write(f"Status: **{status}**")
 
 # Insights Section
 col1, col2, col3 = st.columns(3)
