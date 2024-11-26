@@ -1,18 +1,14 @@
 #streamlit run c:/Users/beam_/OneDrive/Desktop/KendoAI/Web_App/prediction.py
+# Import libraries
 import streamlit as st
-import joblib
 import pandas as pd
 from influxdb_client import InfluxDBClient
 from scipy.stats import skew, kurtosis
+import numpy as np
+import joblib
 import time
 
 from SecretsManager import get_secret
-
-# Streamlit app setup
-st.set_page_config(page_title="Real-Time Kendo Move Predictor", layout="centered")
-
-# Title
-st.title("Real-Time Kendo Move Predictor")
 
 #---------------------------------------------#
 # Fetch the secrets from AWS Secrets Manager
@@ -28,12 +24,24 @@ INFLUXDB_BUCKET = "SIOT_Test"
 model = joblib.load("Cloud_Computing/kendo_move_classifier.pkl")
 scaler = joblib.load("Cloud_Computing/RobustScaler.pkl")
 le = joblib.load("Cloud_Computing/label_encoder.pkl")
-st.success("Model and scaler loaded successfully.")
-#---------------------------------------------#
+print("Successfully loaded model and scaler.")
 
+# Initialize InfluxDB Client
+client = InfluxDBClient(url=INFLUXDB_URL, token=INFLUXDB_TOKEN, org=INFLUXDB_ORG)
+query_api = client.query_api()
+
+# Parameters
+window_size = 10  # Number of samples per window
+fetch_interval = 0.5  # Time in seconds between fetching new data
+REFRESH_INTERVAL = 0.5  # Time interval for Streamlit updates
+
+# Variables for Streamlit
+variables = ['accelX', 'accelY', 'accelZ', 'gyroX', 'gyroY', 'gyroZ', 'roll', 'pitch']
+
+# Define feature extraction
 def extract_features(window):
     features = {}
-    for axis in ['accelX', 'accelY', 'accelZ', 'gyroX', 'gyroY', 'gyroZ', 'roll', 'pitch']:
+    for axis in variables:
         axis_data = window[axis]
         features[f'{axis}_mean'] = axis_data.mean()
         features[f'{axis}_std'] = axis_data.std()
@@ -43,89 +51,93 @@ def extract_features(window):
         features[f'{axis}_kurtosis'] = kurtosis(axis_data, fisher=False)
     return pd.DataFrame([features])
 
-# Define the feature order explicitly
-feature_order = [
-    'accelX_mean', 'accelX_std', 'accelX_max', 'accelX_min', 'accelX_skew', 'accelX_kurtosis',
-    'accelY_mean', 'accelY_std', 'accelY_max', 'accelY_min', 'accelY_skew', 'accelY_kurtosis',
-    'accelZ_mean', 'accelZ_std', 'accelZ_max', 'accelZ_min', 'accelZ_skew', 'accelZ_kurtosis',
-    'gyroX_mean', 'gyroX_std', 'gyroX_max', 'gyroX_min', 'gyroX_skew', 'gyroX_kurtosis',
-    'gyroY_mean', 'gyroY_std', 'gyroY_max', 'gyroY_min', 'gyroY_skew', 'gyroY_kurtosis',
-    'gyroZ_mean', 'gyroZ_std', 'gyroZ_max', 'gyroZ_min', 'gyroZ_skew', 'gyroZ_kurtosis',
-    'roll_mean', 'roll_std', 'roll_max', 'roll_min', 'roll_skew', 'roll_kurtosis',
-    'pitch_mean', 'pitch_std', 'pitch_max', 'pitch_min', 'pitch_skew', 'pitch_kurtosis'
-]
+# Define feature order
+feature_order = [f'{axis}_{stat}' for axis in variables for stat in ['mean', 'std', 'max', 'min', 'skew', 'kurtosis']]
 
-# Parameters
-window_size = 20  # Number of samples per window
-fetch_interval = 0.1  # Time in seconds between fetching new data
+# Streamlit Configuration
+st.set_page_config(page_title="KiAI - Kendo Assistant", page_icon="🤺")
+st.title("KiAI - Kendo Assistant")
 
-# Connect to InfluxDB
-client = InfluxDBClient(url=INFLUXDB_URL, token=INFLUXDB_TOKEN, org=INFLUXDB_ORG)
-query_api = client.query_api()
-st.success("Connected to InfluxDB successfully.")
+# Initialize Session State
+if "is_running" not in st.session_state:
+    st.session_state.is_running = False
 
-# Display metrics
-latest_move = st.empty()
+if "accel_data" not in st.session_state:
+    st.session_state.accel_data = pd.DataFrame(columns=["accelX", "accelY", "accelZ"])
 
-# Real-time prediction
-def run_prediction():
-    while True:
-        # Query InfluxDB to fetch the last 30s of data
-        query = f'''
-        from(bucket: "{INFLUXDB_BUCKET}")
-          |> range(start: -30s)
-          |> filter(fn: (r) => r._measurement == "gyro_status")
-          |> filter(fn: (r) => r._field == "accelX" or r._field == "accelY" or r._field == "accelZ" or
-                               r._field == "gyroX" or r._field == "gyroY" or r._field == "gyroZ" or
-                               r._field == "roll" or r._field == "pitch")
-          |> sort(columns: ["_time"])
-          |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
-          |> drop(columns: ["_start", "_stop", "_measurement"])
-        '''
+if "gyro_data" not in st.session_state:
+    st.session_state.gyro_data = pd.DataFrame(columns=["gyroX", "gyroY", "gyroZ"])
 
-        # Fetch data from InfluxDB
-        df = query_api.query_data_frame(query)
+if "last_prediction" not in st.session_state:
+    st.session_state.last_prediction = None
 
-        # Check if data is empty
-        if df.empty:
-            time.sleep(fetch_interval)
-            continue
+# Start/Stop Button
+if st.button("Start/Stop Data Fetching"):
+    st.session_state.is_running = not st.session_state.is_running
 
-        # Ensure numeric conversion
-        variables = ['accelX', 'accelY', 'accelZ', 'gyroX', 'gyroY', 'gyroZ', 'roll', 'pitch']
-        for var in variables:
-            df[var] = pd.to_numeric(df[var], errors='coerce')
+# Display current status
+status = "Running" if st.session_state.is_running else "Stopped"
+st.write(f"Status: **{status}**")
 
-        # Reset index
-        df = df.reset_index(drop=True)
+# Metrics Section
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    avg_accel_metric = st.metric("Avg Acceleration (m/s²)", "0.00")
+with col2:
+    jerk_metric = st.metric("Avg Jerk (m/s³)", "0.00")
+with col3:
+    speed_metric = st.metric("Speed (m/s)", "0.00")
+with col4:
+    prediction_metric = st.metric("Prediction", "None")
 
-        # Extract the latest window of data
-        if len(df) < window_size:
-            time.sleep(fetch_interval)
-            continue
+# Chart Placeholders
+st.header("Accelerometer Data:")
+accel_chart = st.line_chart(st.session_state.accel_data)
 
-        # Check for missing values in the window
-        if df[variables].isnull().values.any():
-            time.sleep(fetch_interval)
-            continue
+st.header("Gyroscope Data:")
+gyro_chart = st.line_chart(st.session_state.gyro_data)
 
-        # Extract features
-        features_df = extract_features(df.iloc[-window_size:])
-        X_new = features_df[feature_order]
+# Main Loop
+while st.session_state.is_running:
+    # Fetch data from InfluxDB
+    query = f'''
+from(bucket: "{INFLUXDB_BUCKET}")
+  |> range(start: -30s)
+  |> filter(fn: (r) => r._measurement == "gyro_status")
+  |> filter(fn: (r) => r._field == "accelX" or r._field == "accelY" or r._field == "accelZ" or
+                       r._field == "gyroX" or r._field == "gyroY" or r._field == "gyroZ" or
+                       r._field == "roll" or r._field == "pitch")
+  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+  |> drop(columns: ["_start", "_stop", "_measurement"])
+'''
 
-        # Scale the features
-        X_new_scaled = scaler.transform(X_new)
+    data = query_api.query_data_frame(query)
 
-        # Make prediction
-        prediction = model.predict(X_new_scaled)
-        predicted_move = le.inverse_transform(prediction)[0]
+    # Check if data is retrieved
+    if not data.empty:
+        data["_time"] = pd.to_datetime(data["_time"])
+        data.set_index("_time", inplace=True)
+        st.session_state.accel_data = data[["accelX", "accelY", "accelZ"]]
+        st.session_state.gyro_data = data[["gyroX", "gyroY", "gyroZ"]]
 
-        # Update the metric
-        latest_move.metric("Latest Predicted Move", predicted_move)
+        # Update metrics
+        if len(data) >= window_size:
+            latest_window = data.iloc[-window_size:]
+            features_df = extract_features(latest_window)
+            X_new = features_df[feature_order]
+            X_scaled = scaler.transform(X_new)
+            prediction = model.predict(X_scaled)
+            st.session_state.last_prediction = le.inverse_transform(prediction)[0]
 
-        # Wait for the next fetch
-        time.sleep(fetch_interval)
+            # Update Metrics
+            avg_accel_metric.metric("Avg Acceleration (m/s²)", f"{st.session_state.accel_data.mean().mean():.2f}")
+            prediction_metric.metric("Prediction", st.session_state.last_prediction)
 
-# Start the prediction loop
-if st.button("Start Prediction"):
-    run_prediction()
+        # Update Charts
+        accel_chart.line_chart(st.session_state.accel_data)
+        gyro_chart.line_chart(st.session_state.gyro_data)
+    else:
+        st.warning("No data available.")
+
+    # Refresh Interval
+    time.sleep(REFRESH_INTERVAL)
