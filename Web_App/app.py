@@ -23,11 +23,14 @@ INFLUXDB_ORG = secret_data.get('InfluxDB_organisation')
 INFLUXDB_BUCKET = "SIOT_Test"
 
 # Refresh Interval (sec)
-REFRESH_INTERVAL = 1
+REFRESH_INTERVAL = 0.5
 
 # Initialize InfluxDB Client
 client = InfluxDBClient(url=INFLUXDB_URL, token=INFLUXDB_TOKEN, org=INFLUXDB_ORG)
 query_api = client.query_api()
+
+#Video Streaming Variables
+esp32_ip = secret_data.get('esp32_local_ip')
 
 #---------------------------------------------#
 # Declare Functions
@@ -97,7 +100,7 @@ st.set_page_config(
 # Streamlit Configuration
 st.title("KiAI - Kendo Assistant")
 
-# Initialize Session State
+# Initialise Session State
 if "is_running" not in st.session_state:
     st.session_state.is_running = False
 
@@ -107,8 +110,8 @@ if "accel_data" not in st.session_state:
 if "gyro_data" not in st.session_state:
     st.session_state.gyro_data = pd.DataFrame(columns=["gyroX", "gyroY", "gyroZ"])
 
-if "stream_active" not in st.session_state:
-    st.session_state.stream_active = False  # Initialize stream_active to False
+if "last_frame" not in st.session_state:
+    st.session_state.last_frame = None
 
 # Start/Stop Button
 if st.button("Start/Stop Data Fetching"):
@@ -146,6 +149,16 @@ with col2:
 
 with col3:
     jerk_metric = st.metric("Average Jerk (m/s³)", f"{st.session_state.jerk:.2f}")
+#---------------------------------------------#
+# ESP32 Video Stream
+st.header("Practice Live Feed")
+if st.session_state.is_running:
+    try:
+        st.image(esp32_ip, caption="ESP32-CAM Live Stream", use_container_width=True)
+    except Exception as e:
+        st.error(f"Failed to load video stream: {e}")
+else:
+    st.warning("Video stream is stopped.")
 
 #---------------------------------------------#
 # Graph Plotting

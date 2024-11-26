@@ -4,3 +4,8 @@ influxdb-client
 numpy
 boto3
 botocore
+opencv-python
+joblib
+scikit-learn
+scipy
+time

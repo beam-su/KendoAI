@@ -1,0 +1,7 @@
+numpy
+pandas
+joblib
+influxdb-client
+scikit-learn
+scipy
+time
