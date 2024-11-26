@@ -21,9 +21,9 @@ INFLUXDB_ORG = secret_data.get('InfluxDB_organisation')
 INFLUXDB_BUCKET = "SIOT_Test"
 
 # Load model and scaler
-model = joblib.load("Cloud_Computing/kendo_move_classifier.pkl")
-scaler = joblib.load("Cloud_Computing/RobustScaler.pkl")
-le = joblib.load("Cloud_Computing/label_encoder.pkl")
+model = joblib.load("Web_App/kendo_move_classifier.pkl")
+scaler = joblib.load("Web_App/RobustScaler.pkl")
+le = joblib.load("Web_App/label_encoder.pkl")
 print("Successfully loaded model and scaler.")
 
 # Initialize InfluxDB Client

@@ -5,14 +5,14 @@
 import streamlit as st
 import pandas as pd
 from influxdb_client import InfluxDBClient
-import time
+from scipy.stats import skew, kurtosis
 import numpy as np
+import joblib
+import time
 
 from SecretsManager import get_secret
 
 #---------------------------------------------#
-# Declare Variables
-
 # Fetch the secrets from AWS Secrets Manager
 secret_data = get_secret('kendo-line-bot-secret')
 
@@ -22,85 +22,45 @@ INFLUXDB_TOKEN = secret_data.get('InfluxDB_Token')
 INFLUXDB_ORG = secret_data.get('InfluxDB_organisation')
 INFLUXDB_BUCKET = "SIOT_Test"
 
-# Refresh Interval (sec)
-REFRESH_INTERVAL = 0.5
+# Load model and scaler
+model = joblib.load("Web_App/kendo_move_classifier.pkl")
+scaler = joblib.load("Web_App/RobustScaler.pkl")
+le = joblib.load("Web_App/label_encoder.pkl")
+print("Successfully loaded model and scaler.")
 
 # Initialize InfluxDB Client
 client = InfluxDBClient(url=INFLUXDB_URL, token=INFLUXDB_TOKEN, org=INFLUXDB_ORG)
 query_api = client.query_api()
 
-#Video Streaming Variables
-esp32_ip = secret_data.get('esp32_local_ip')
+# Parameters
+window_size = 10  # Number of samples per window
+fetch_interval = 0.5  # Time in seconds between fetching new data
+REFRESH_INTERVAL = 0.5  # Time interval for Streamlit updates
 
-#---------------------------------------------#
-# Declare Functions
+# Variables for Streamlit
+variables = ['accelX', 'accelY', 'accelZ', 'gyroX', 'gyroY', 'gyroZ', 'roll', 'pitch']
 
-# Query Function
-def get_sensor_data():
-    query = f'''
-    from(bucket: "{INFLUXDB_BUCKET}")
-      |> range(start: -1m)
-      |> filter(fn: (r) => r._measurement == "gyro_status")
-      |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
-      |> sort(columns: ["_time"], desc: false)
-    '''
-    tables = query_api.query_data_frame(org=INFLUXDB_ORG, query=query)
-    if not tables.empty:
-        return tables
-    else:
-        return pd.DataFrame()
-    
-# Calculate Average Acceleration
-def calculate_avg_acceleration(data):
-    acc_mag = np.sqrt(data["accelX"]**2 + data["accelY"]**2 + data["accelZ"]**2)
-    return acc_mag.mean()* 9.80665
+# Define feature extraction
+def extract_features(window):
+    features = {}
+    for axis in variables:
+        axis_data = window[axis]
+        features[f'{axis}_mean'] = axis_data.mean()
+        features[f'{axis}_std'] = axis_data.std()
+        features[f'{axis}_max'] = axis_data.max()
+        features[f'{axis}_min'] = axis_data.min()
+        features[f'{axis}_skew'] = skew(axis_data)
+        features[f'{axis}_kurtosis'] = kurtosis(axis_data, fisher=False)
+    return pd.DataFrame([features])
 
-# Calculate Jerk
-def calculate_jerk(data):
-    if len(data) < 2:  # Ensure there are at least two rows
-        return 0.0
-    
-    # Calculate time differences
-    time_deltas = (data.index[1:] - data.index[:-1]).total_seconds()
-    
-    # Ensure time_deltas is a numpy array
-    time_deltas = np.array(time_deltas)
-    
-    # Calculate acceleration differences
-    accel_diff = np.diff(data[["accelX", "accelY", "accelZ"]].values* 9.80665, axis=0)
-    
-    # Calculate jerk magnitude for each time interval
-    jerk_magnitudes = np.linalg.norm(accel_diff, axis=1) / time_deltas
-    return np.mean(jerk_magnitudes)
+# Define feature order
+feature_order = [f'{axis}_{stat}' for axis in variables for stat in ['mean', 'std', 'max', 'min', 'skew', 'kurtosis']]
 
-def calculate_speed(data):
-    if len(data) < 2:  # Ensure there are at least two rows
-        return 0.0
-    
-    # Calculate time differences
-    time_deltas = (data.index[1:] - data.index[:-1]).total_seconds()
-    time_deltas = np.array(time_deltas)
-
-    # Calculate acceleration magnitudes and convert to m/s²
-    acc_magnitudes = np.sqrt(data["accelX"]**2 + data["accelY"]**2 + data["accelZ"]**2) * 9.80665
-    acc_deltas = np.diff(acc_magnitudes)
-
-    # Approximate speed changes
-    speed_changes = acc_deltas * time_deltas  # Δv = a * Δt
-    return abs(np.sum(speed_changes))
-#---------------------------------------------#
-
-# Set the title and favicon on the tab
-st.set_page_config(
-    page_title='KiAI',
-    page_icon='🤺',
-)
-
-#---------------------------------------------#
 # Streamlit Configuration
+st.set_page_config(page_title="KiAI - Kendo Assistant", page_icon="🤺")
 st.title("KiAI - Kendo Assistant")
 
-# Initialise Session State
+# Initialize Session State
 if "is_running" not in st.session_state:
     st.session_state.is_running = False
 
@@ -110,8 +70,8 @@ if "accel_data" not in st.session_state:
 if "gyro_data" not in st.session_state:
     st.session_state.gyro_data = pd.DataFrame(columns=["gyroX", "gyroY", "gyroZ"])
 
-if "last_frame" not in st.session_state:
-    st.session_state.last_frame = None
+if "last_prediction" not in st.session_state:
+    st.session_state.last_prediction = None
 
 # Start/Stop Button
 if st.button("Start/Stop Data Fetching"):
@@ -119,51 +79,20 @@ if st.button("Start/Stop Data Fetching"):
 
 # Display current status
 status = "Running" if st.session_state.is_running else "Stopped"
+st.write(f"Status: **{status}**")
 
-# Insights Section
-col1, col2, col3 = st.columns(3)
-
-if "avg_acceleration" not in st.session_state:
-    st.session_state.avg_acceleration = 0.0
-
-if "jerk" not in st.session_state:
-    st.session_state.jerk = 0.0
-
-if "speed" not in st.session_state:
-    st.session_state.speed = 0.0
-
-if "prev_speed" not in st.session_state:
-    st.session_state.prev_speed = 0.0
-
+# Metrics Section
+col1, col2, col3, col4 = st.columns(4)
 with col1:
-    speed_change = st.session_state.speed - st.session_state.prev_speed
-    speed_metric = st.metric(
-        "Speed (m/s)",
-        f"{st.session_state.speed:.2f}",
-        delta=f"{speed_change:.2f}",
-        delta_color="normal"
-    )
-
+    avg_accel_metric = st.metric("Avg Acceleration (m/s²)", "0.00")
 with col2:
-    avg_accel_metric = st.metric("Average Acceleration (m/s²)", f"{st.session_state.avg_acceleration:.2f}")
-
+    jerk_metric = st.metric("Avg Jerk (m/s³)", "0.00")
 with col3:
-    jerk_metric = st.metric("Average Jerk (m/s³)", f"{st.session_state.jerk:.2f}")
-#---------------------------------------------#
-# ESP32 Video Stream
-st.header("Practice Live Feed")
-if st.session_state.is_running:
-    try:
-        st.image(esp32_ip, caption="ESP32-CAM Live Stream", use_container_width=True)
-    except Exception as e:
-        st.error(f"Failed to load video stream: {e}")
-else:
-    st.warning("Video stream is stopped.")
+    speed_metric = st.metric("Speed (m/s)", "0.00")
+with col4:
+    prediction_metric = st.metric("Prediction", "None")
 
-#---------------------------------------------#
-# Graph Plotting
-
-# Line Chart Placeholders
+# Chart Placeholders
 st.header("Accelerometer Data:")
 accel_chart = st.line_chart(st.session_state.accel_data)
 
@@ -172,38 +101,41 @@ gyro_chart = st.line_chart(st.session_state.gyro_data)
 
 # Main Loop
 while st.session_state.is_running:
-    # Fetch Data
-    data = get_sensor_data()
+    # Fetch data from InfluxDB
+    query = f'''
+from(bucket: "{INFLUXDB_BUCKET}")
+  |> range(start: -30s)
+  |> filter(fn: (r) => r._measurement == "gyro_status")
+  |> filter(fn: (r) => r._field == "accelX" or r._field == "accelY" or r._field == "accelZ" or
+                       r._field == "gyroX" or r._field == "gyroY" or r._field == "gyroZ" or
+                       r._field == "roll" or r._field == "pitch")
+  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+  |> drop(columns: ["_start", "_stop", "_measurement"])
+'''
 
+    data = query_api.query_data_frame(query)
+
+    # Check if data is retrieved
     if not data.empty:
-        # Prepare Data
-        data["_time"] = pd.to_datetime(data["_time"])  # Convert to datetime
+        data["_time"] = pd.to_datetime(data["_time"])
         data.set_index("_time", inplace=True)
-
-        # Update Session State with the latest data
         st.session_state.accel_data = data[["accelX", "accelY", "accelZ"]]
         st.session_state.gyro_data = data[["gyroX", "gyroY", "gyroZ"]]
 
-        # Update Metrics
-        if len(st.session_state.accel_data) > 1:
-            st.session_state.avg_acceleration = calculate_avg_acceleration(st.session_state.accel_data)
-            st.session_state.jerk = calculate_jerk(st.session_state.accel_data)
+        # Update metrics
+        if len(data) >= window_size:
+            latest_window = data.iloc[-window_size:]
+            features_df = extract_features(latest_window)
+            X_new = features_df[feature_order]
+            X_scaled = scaler.transform(X_new)
+            prediction = model.predict(X_scaled)
+            st.session_state.last_prediction = le.inverse_transform(prediction)[0]
 
-            # Update speed
-            st.session_state.prev_speed = st.session_state.speed
-            st.session_state.speed = calculate_speed(st.session_state.accel_data)
+            # Update Metrics
+            avg_accel_metric.metric("Avg Acceleration (m/s²)", f"{st.session_state.accel_data.mean().mean():.2f}")
+            prediction_metric.metric("Prediction", st.session_state.last_prediction)
 
-        # Display metrics
-        avg_accel_metric.metric("Average Acceleration (m/s²)", f"{st.session_state.avg_acceleration:.2f}")
-        jerk_metric.metric("Average Jerk (m/s³)", f"{st.session_state.jerk:.2f}")
-        speed_metric.metric(
-            "Speed (m/s)",
-            f"{st.session_state.speed:.2f}",
-            delta=f"{st.session_state.speed - st.session_state.prev_speed:.2f}",
-            delta_color="normal"
-        )
-
-        # Update Line Charts
+        # Update Charts
         accel_chart.line_chart(st.session_state.accel_data)
         gyro_chart.line_chart(st.session_state.gyro_data)
     else:
@@ -211,16 +143,3 @@ while st.session_state.is_running:
 
     # Refresh Interval
     time.sleep(REFRESH_INTERVAL)
-
-# When stopped, display the last data fetched
-if not st.session_state.is_running:
-    avg_accel_metric.metric("Average Acceleration (m/s²)", f"{st.session_state.avg_acceleration:.2f}")
-    jerk_metric.metric("Average Jerk (m/s³)", f"{st.session_state.jerk:.2f}")
-    speed_metric.metric(
-        "Speed (m/s)",
-        f"{st.session_state.speed:.2f}",
-        delta=f"{st.session_state.speed - st.session_state.prev_speed:.2f}",
-        delta_color="normal"
-    )
-    accel_chart.line_chart(st.session_state.accel_data)
-    gyro_chart.line_chart(st.session_state.gyro_data)
