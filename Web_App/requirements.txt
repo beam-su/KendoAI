@@ -8,4 +8,3 @@ opencv-python
 joblib
 scikit-learn
 scipy
-time
