@@ -1,3 +1,4 @@
 boto3
 requests
 line-bot-sdk
+influxdb-client

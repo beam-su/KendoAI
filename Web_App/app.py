@@ -92,6 +92,20 @@ with col3:
 with col4:
     prediction_metric = st.metric("Prediction", "None")
 
+#Live Feed
+st.header("Live Video Feed")
+
+# Embed the video feed from ESP32
+video_feed_url = secret_data.get('esp32cam_link')
+st.markdown(
+    f"""
+    <div style="text-align:center;">
+        <iframe src="{video_feed_url}" width="640" height="480" frameborder="0" allowfullscreen></iframe>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
 # Chart Placeholders
 st.header("Accelerometer Data:")
 accel_chart = st.line_chart(st.session_state.accel_data)

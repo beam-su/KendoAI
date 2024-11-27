@@ -1,4 +1,5 @@
-#streamlit run c:/Users/beam_/OneDrive/Desktop/KendoAI/Web_App/prediction.py
+# This is the streamlit script to test out the prediction model when deployed on cloud
+
 # Import libraries
 import streamlit as st
 import pandas as pd

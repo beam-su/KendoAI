@@ -103,15 +103,11 @@ def send_imagemap_message(json_file,user_id, reply_token):
         print("Error loading imagemap message.")
 
 def message_listener(user_id, user_message, reply_token):
-    if user_message == "Armour Registeration":
-        push_message("Begin Armour Registeration")
-
-    if user_message == "Role Change":
-        json_file_path = os.path.join("richobject", "rolemenu.json")
-        send_imagemap_message(json_file_path, user_id, reply_token)
-        #update_user_role(user_id, new_role)
+    if user_message == "Practice":
+        push_message("Navigate here to monitor your training! https://kendoai.streamlit.app/")
 
 ######################################
+
 
 def lambda_handler(event, context):
     # Check if the 'body' field exists in the event
